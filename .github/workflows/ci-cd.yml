@@ -261,6 +261,7 @@ jobs:
 
       - name: Install build dependencies (Linux)
         if: matrix.platform == 'linux'
+        shell: bash
         run: |
           sudo apt-get update
           # Install essential build tools
@@ -273,12 +274,14 @@ jobs:
 
       - name: Install build dependencies (Windows)
         if: matrix.platform == 'windows'
+        shell: powershell
         run: |
           choco install cmake git rust
           git lfs install
           # Note: Chocolatey needs to be pre-installed on the Windows runner image.
 
       - name: Install Python dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install build wheel setuptools twine
@@ -329,6 +332,7 @@ jobs:
           # and this setup.py is just for packaging the Python interface.
 
       - name: Build wheel
+        shell: bash
         run: |
           cd python
           python -m build --wheel
@@ -336,6 +340,7 @@ jobs:
           # Builds the wheel package using the 'build' tool.
 
       - name: Test wheel installation
+        shell: bash
         run: |
           cd python
           # Test installing the built wheel and importing the package
