@@ -75,8 +75,9 @@ A production-quality CI/CD pipeline for [MLC-LLM](https://github.com/mlc-ai/mlc-
 - ✅ Mock MLC-LLM structure for testing
 - ✅ Full CI/CD pipeline functionality
 - ✅ Cross-platform Python wheel building
-- ✅ GitHub Container Registry publishing
+- ✅ GitHub Container Registry publishing (with GITHUB_TOKEN)
 - ✅ Automated release creation
+- ✅ Proper workflow permissions configured
 - 🔄 Ready to switch to full MLC-LLM build after validation
 
 ## 🚀 Quick Start
