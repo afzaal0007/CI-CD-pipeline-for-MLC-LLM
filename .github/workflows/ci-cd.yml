@@ -1,4 +1,4 @@
-name: MLC-LLM CI/CD Pipeline (Optimized)
+name: MLC-LLM CI/CD Pipeline
 
 # Optimized workflow for faster builds and better resource usage
 permissions:
@@ -36,7 +36,7 @@ env:
 jobs:
   # Job 1: Fast code quality checks
   lint-and-format:
-    name: Code Quality (Fast)
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -71,7 +71,7 @@ jobs:
 
   # Job 2: Optimized Docker build with better caching
   build-docker-image:
-    name: Build Docker (Optimized)
+        name: Build Docker
     runs-on: ubuntu-latest
     needs: lint-and-format
     if: always() && (needs.lint-and-format.result == 'success' || github.event.inputs.force_build == 'true')
@@ -103,18 +103,21 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,suffix=-opt
-            type=ref,event=pr,suffix=-opt
-            type=semver,pattern={{version}},suffix=-opt
-            type=sha,prefix={{branch}}-opt-
-            type=raw,value=latest-opt,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-,enable={{is_default_branch}}
+            type=sha,prefix=commit-,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push optimized Docker image
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ${{ github.event.inputs.use_optimized_dockerfile == 'true' && './Dockerfile.optimized' || './Dockerfile' }}
+          file: ./Dockerfile
           target: development
           platforms: linux/amd64
           push: true
@@ -129,7 +132,7 @@ jobs:
 
   # Job 3: Lightweight Docker tests
   test-docker-image:
-    name: Test Docker (Fast)
+    name: Test Docker
     runs-on: ubuntu-latest
     needs: build-docker-image
     strategy:
@@ -159,7 +162,7 @@ jobs:
 
   # Job 4: Parallel wheel building with caching
   build-wheels:
-    name: Build Wheels (Cached)
+    name: Build Wheels
     runs-on: ${{ matrix.os }}
     needs: [lint-and-format, test-docker-image]
     if: always() && (needs.lint-and-format.result == 'success' && needs.test-docker-image.result == 'success' || github.event.inputs.force_build == 'true')
@@ -235,7 +238,7 @@ jobs:
 
   # Job 5: Optimized production image (only on main/tags)
   build-production-image:
-    name: Build Production (Minimal)
+    name: Build Production
     runs-on: ubuntu-latest
     needs: [build-wheels, test-docker-image]
     if: (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
@@ -261,15 +264,15 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=ref,event=branch,suffix=-prod-opt
-            type=semver,pattern={{version}},suffix=-prod-opt
-            type=raw,value=prod-opt,enable={{is_default_branch}}
+            type=ref,event=branch,suffix=-prod
+            type=semver,pattern={{version}},suffix=-prod
+            type=raw,value=prod,enable={{is_default_branch}}
 
       - name: Build and push production Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile.optimized
+          file: ./Dockerfile
           target: production
           platforms: linux/amd64
           push: true
@@ -282,7 +285,7 @@ jobs:
 
   # Job 6: Fast release creation (only for tags)
   create-release:
-    name: Create Release (Fast)
+    name: Create Release
     runs-on: ubuntu-latest
     needs: [build-wheels, build-docker-image]
     if: startsWith(github.ref, 'refs/tags/v') && (needs.build-wheels.result == 'success' && needs.build-docker-image.result == 'success')
