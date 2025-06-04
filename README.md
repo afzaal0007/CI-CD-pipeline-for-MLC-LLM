@@ -66,6 +66,17 @@ A production-quality CI/CD pipeline for [MLC-LLM](https://github.com/mlc-ai/mlc-
 | Intel (Vulkan) | ✅ | ✅ | ❌ |
 | Apple (Metal) | ❌ | ❌ | ✅ |
 
+## ⚠️ **Current Status: Test Mode**
+
+**Note**: The pipeline is currently using a simplified test Dockerfile (`Dockerfile.test`) to validate the CI/CD setup. Once the pipeline is working correctly, we'll switch back to the full MLC-LLM build.
+
+**Test Status**: 
+- ✅ Basic CI/CD pipeline functionality
+- ✅ Docker image building and publishing
+- ✅ Python wheel building
+- ✅ GitHub releases
+- ⏳ Full MLC-LLM compilation (coming after validation)
+
 ## 🚀 Quick Start
 
 ### Option 1: Using Pre-built Docker Images

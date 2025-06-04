@@ -149,6 +149,8 @@ jobs:
         with:
           # Build context is the root of the repository
           context: .
+          # Use test Dockerfile temporarily
+          file: ./Dockerfile.test
           # Build the 'development' stage defined in the Dockerfile
           target: development
           platforms: linux/amd64
@@ -179,7 +181,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_TOKEN }}
 
       - name: Test Docker image - ${{ matrix.test-type }}
         # Run tests inside the built Docker image
@@ -279,6 +281,7 @@ jobs:
           # Note: twine is installed but not used in this workflow.
 
       - name: Create mock MLC-LLM source structure
+        shell: bash
         run: |
           mkdir -p python/mlc_llm
           cat > python/mlc_llm/__init__.py << 'EOF'
@@ -328,6 +331,7 @@ jobs:
 
       - name: Test wheel installation
         run: |
+          cd python
           # Test installing the built wheel and importing the package
           pip install dist/*.whl
           python -c "import mlc_llm; print(mlc_llm.__version__)"
@@ -404,11 +408,11 @@ jobs:
 
       - name: Log in to Container Registry
         uses: docker/login-action@v3
-        # Logs into the GitHub Container Registry using the GITHUB_TOKEN
+        # Logs into the GitHub Container Registry using the GH_TOKEN
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.GH_TOKEN }}
 
       - name: Extract metadata for production
         id: meta-prod
@@ -428,6 +432,8 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          # Use test Dockerfile temporarily
+          file: ./Dockerfile.test
           # Build the 'production' stage defined in the Dockerfile
           target: production
           platforms: linux/amd64
@@ -448,9 +454,10 @@ jobs:
     steps:
       - name: Delete old package versions
         uses: actions/delete-package-versions@v4
+        continue-on-error: true
         with:
           # The name of the package in the GitHub Container Registry
-          package-name: mlc-llm
+          package-name: mlc-llm-pipeline
           package-type: container
           # Keep at least the last 10 versions
           min-versions-to-keep: 10

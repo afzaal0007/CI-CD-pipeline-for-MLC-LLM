@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for MLC-LLM development and build environment
 # Supports both interactive development and automated builds
 
-FROM nvidia/cuda:12.2-devel-ubuntu22.04 as base
+FROM nvidia/cuda:12.1-devel-ubuntu22.04 as base
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive
@@ -134,7 +134,7 @@ ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["build"]
 
 # Production stage - minimal runtime image
-FROM nvidia/cuda:12.2-runtime-ubuntu22.04 as production
+FROM nvidia/cuda:12.1-runtime-ubuntu22.04 as production
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
