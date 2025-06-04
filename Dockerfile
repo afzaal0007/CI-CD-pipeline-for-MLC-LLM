@@ -1,173 +1,122 @@
-# Multi-stage Dockerfile for MLC-LLM development and build environment
-# Supports both interactive development and automated builds
+# Optimized Multi-stage Dockerfile for MLC-LLM
+# Focuses on smaller image sizes and faster build times
 
-FROM ubuntu:22.04 as base
+# Use smaller base image for the base stage
+FROM python:3.11-slim-bullseye as base
 
 # Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Install only essential system dependencies in a single layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     git \
-    git-lfs \
     curl \
-    wget \
-    vim \
-    nano \
-    htop \
-    tree \
-    unzip \
-    software-properties-common \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Install Rust and Cargo
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Install Rust in a more efficient way
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal \
+    && . ~/.cargo/env \
+    && rustup --version
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install Miniconda
-RUN wget -q https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
-    bash /tmp/miniconda.sh -b -p /opt/conda && \
-    rm /tmp/miniconda.sh
+# Use Miniconda instead of full Anaconda for smaller size
+RUN curl -sSL https://repo.anaconda.com/miniconda/Miniconda3-py311_24.9.2-0-Linux-x86_64.sh -o miniconda.sh \
+    && bash miniconda.sh -b -p /opt/conda \
+    && rm miniconda.sh \
+    && /opt/conda/bin/conda clean -afy
 ENV PATH="/opt/conda/bin:${PATH}"
 
-# Create conda environment for MLC-LLM
-RUN conda create -n mlc-llm -c conda-forge \
-    "cmake>=3.24" \
-    rust \
-    git \
-    python=3.11 \
-    pip \
-    numpy \
-    scipy \
+# Create conda environment with minimal packages
+RUN conda create -n mlc-llm python=3.11 pip -y \
     && conda clean -afy
 
-# Activate conda environment by default
-RUN echo "conda activate mlc-llm" >> ~/.bashrc
-SHELL ["/bin/bash", "-c"]
+# Initialize conda properly
+RUN /opt/conda/bin/conda init bash \
+    && echo "conda activate mlc-llm" >> ~/.bashrc
 
-# Install Python dependencies
-RUN source activate mlc-llm && \
-    pip install --no-cache-dir \
-    wheel \
-    setuptools \
-    build \
-    twine \
-    pytest \
-    pytest-cov \
-    black \
-    flake8 \
-    mypy \
-    pre-commit
+# Development stage - optimized for development
+FROM base as development
 
-# Install git-lfs
-RUN conda install -c conda-forge git-lfs -y
+# Install development dependencies in conda environment
+RUN /opt/conda/envs/mlc-llm/bin/pip install --no-cache-dir \
+    wheel setuptools build \
+    pytest pytest-cov \
+    black flake8 mypy isort \
+    jupyter ipython
 
-# Set working directory
+# Create mock MLC-LLM structure
+RUN mkdir -p /workspace/mlc-llm/python/mlc_llm \
+    && echo '__version__ = "0.1.0-test"' > /workspace/mlc-llm/python/mlc_llm/__init__.py \
+    && echo 'print("MLC-LLM test version loaded")' >> /workspace/mlc-llm/python/mlc_llm/__init__.py
+
+# Set environment variables
+ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm \
+    PYTHONPATH=/workspace/mlc-llm/python
+
 WORKDIR /workspace
 
 # Copy entrypoint script
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Development stage - for interactive development
-FROM base as development
-
-# Install additional development tools
-RUN source activate mlc-llm && \
-    pip install --no-cache-dir \
-    jupyter \
-    ipython \
-    matplotlib \
-    seaborn \
-    pandas
-
-# Set up development environment
-RUN echo 'alias ll="ls -la"' >> ~/.bashrc && \
-    echo 'alias la="ls -la"' >> ~/.bashrc && \
-    echo 'export PS1="\[\033[01;32m\]mlc-dev\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ "' >> ~/.bashrc
-
-# Create a mock MLC-LLM structure for development testing
-RUN mkdir -p /workspace/mlc-llm/python/mlc_llm && \
-    echo '__version__ = "0.1.0-test"' > /workspace/mlc-llm/python/mlc_llm/__init__.py && \
-    echo 'print("MLC-LLM test version loaded")' >> /workspace/mlc-llm/python/mlc_llm/__init__.py
-
-# Set environment variables for development
-ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm
-ENV PYTHONPATH=${MLC_LLM_SOURCE_DIR}/python:${PYTHONPATH}
-
-# Expose common ports
 EXPOSE 8888 8000 8080
-
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["bash"]
 
-# Build stage - for automated builds and CI
+# Build stage - optimized for CI/CD builds
 FROM base as build
 
-# Copy our build and test scripts
+# Install build dependencies
+RUN /opt/conda/envs/mlc-llm/bin/pip install --no-cache-dir \
+    wheel setuptools build cmake
+
+# Copy scripts and create mock structure
 COPY ./scripts /workspace/scripts
 COPY ./tests /workspace/tests
 
-# Create a mock MLC-LLM structure for initial testing
-RUN mkdir -p /workspace/mlc-llm/python/mlc_llm && \
-    echo '__version__ = "0.1.0-test"' > /workspace/mlc-llm/python/mlc_llm/__init__.py && \
-    echo 'print("MLC-LLM test version loaded")' >> /workspace/mlc-llm/python/mlc_llm/__init__.py
+RUN mkdir -p /workspace/mlc-llm/python/mlc_llm \
+    && echo '__version__ = "0.1.0-test"' > /workspace/mlc-llm/python/mlc_llm/__init__.py \
+    && echo 'print("MLC-LLM test version loaded")' >> /workspace/mlc-llm/python/mlc_llm/__init__.py
 
-# Set the workspace to the MLC-LLM directory
+# Mock build artifacts
+RUN mkdir -p /workspace/mlc-llm/build \
+    && echo "Mock build artifacts" > /workspace/mlc-llm/build/libmlc_llm.so
+
+ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm \
+    PYTHONPATH=/workspace/mlc-llm/python
+
 WORKDIR /workspace/mlc-llm
-
-# Set MLC_LLM_SOURCE_DIR environment variable
-ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm
-ENV PYTHONPATH=${MLC_LLM_SOURCE_DIR}/python:${PYTHONPATH}
-
-# Mock build process for testing
-RUN source activate mlc-llm && \
-    cd /workspace/mlc-llm && \
-    mkdir -p build && \
-    cd build && \
-    echo "Mock build artifacts for testing" > libmlc_llm.so && \
-    echo "Mock TVM runtime" > libtvm_runtime.so
-
-# Mock install MLC-LLM as Python package
-RUN source activate mlc-llm && \
-    cd /workspace/mlc-llm && \
-    echo 'import sys; sys.path.insert(0, "/workspace/mlc-llm/python")' > setup_path.py
-
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["build"]
 
 # Production stage - minimal runtime image
-FROM ubuntu:22.04 as production
+FROM python:3.11-slim-bullseye as production
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONUNBUFFERED=1
 
-# Install minimal runtime dependencies
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
+# Install only runtime dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    python3-venv \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
-# Copy built artifacts from build stage
-COPY --from=build /opt/conda /opt/conda
-COPY --from=build /workspace/mlc-llm/build /workspace/mlc-llm/build
+# Copy only necessary artifacts from build stage
+COPY --from=build /opt/conda/envs/mlc-llm /opt/conda/envs/mlc-llm
 COPY --from=build /workspace/mlc-llm/python /workspace/mlc-llm/python
+COPY --from=build /workspace/mlc-llm/build /workspace/mlc-llm/build
 
-ENV PATH="/opt/conda/bin:${PATH}"
-ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm
-ENV PYTHONPATH=${MLC_LLM_SOURCE_DIR}/python:${PYTHONPATH}
+ENV PATH="/opt/conda/envs/mlc-llm/bin:${PATH}" \
+    MLC_LLM_SOURCE_DIR=/workspace/mlc-llm \
+    PYTHONPATH=/workspace/mlc-llm/python
 
 WORKDIR /workspace/mlc-llm
 
-RUN echo "conda activate mlc-llm" >> ~/.bashrc
-
-ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["source activate mlc-llm && python -m mlc_llm.cli.serve --help"]
+CMD ["python", "-c", "import mlc_llm; print(f'MLC-LLM {mlc_llm.__version__} ready')"]
 

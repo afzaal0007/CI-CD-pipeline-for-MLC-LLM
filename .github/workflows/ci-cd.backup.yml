@@ -1,0 +1,481 @@
+name: MLC-LLM CI/CD Pipeline
+
+# Define permissions for the GITHUB_TOKEN
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+  actions: read
+  security-events: write
+
+on:
+  # Trigger the workflow on push events
+  push:
+    # Run on main and develop branches
+    branches: [ main, develop ]
+    # Run on tags starting with 'v' (e.g., v1.0.0)
+    tags: [ 'v*' ]
+  # Trigger the workflow on pull request events targeting main or develop
+  pull_request:
+    branches: [ main, develop ]
+  # Allow manual triggering of the workflow from the GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if tests fail'
+        required: false
+        default: false
+        type: boolean
+
+# Define environment variables available to all jobs
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: afzaal0007/mlc-llm-pipeline
+  PYTHON_VERSION: '3.11'
+  CMAKE_VERSION: '3.24'
+
+jobs:
+  # Job 1: Code Quality and Linting
+  lint-and-format:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # Fetch all history for accurate linting/formatting checks if needed
+          fetch-depth: 0
+          # Checkout submodules recursively
+          submodules: recursive
+
+      # Set up the specified Python version
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          # Cache key based on OS, job name (lint), and hash of requirements/pyproject files
+          key: ${{ runner.os }}-pip-lint-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+          restore-keys: |
+            # Fallback keys for cache restoration
+            ${{ runner.os }}-pip-lint-
+            ${{ runner.os }}-pip-
+
+      # Install Python dependencies for linting and building
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black flake8 mypy isort pre-commit
+          pip install build wheel setuptools
+          # Note: mypy and pre-commit are installed but not explicitly run in subsequent steps.
+
+      - name: Run black (code formatting check)
+        run: |
+          if [ -d "python" ]; then
+            black --check --diff python/
+          else
+            echo "No python directory found, skipping black check"
+          fi
+          # Checks Python files in the 'python/' directory for Black formatting compliance.
+
+      - name: Run flake8 (linting)
+        run: |
+          if [ -d "python" ]; then
+            flake8 python/ --count --select=E9,F63,F7,F82 --show-source --statistics
+            flake8 python/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+          else
+            echo "No python directory found, skipping flake8 check"
+          fi
+          # Runs Flake8 checks. The first command checks for critical errors (E9, F63, F7, F82). The second checks for complexity and line length, exiting with zero even if violations are found (useful for warnings).
+
+      - name: Run isort (import sorting check)
+        run: |
+          if [ -d "python" ]; then
+            isort --check-only --diff python/
+          else
+            echo "No python directory found, skipping isort check"
+          fi
+          # Checks Python files in the 'python/' directory for Isort import sorting compliance.
+
+  # Job 2: Build and Test Docker Image
+  build-docker-image:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: lint-and-format
+    if: always() && (needs.lint-and-format.result == 'success' || github.event.inputs.force_build == 'true')
+    # Define outputs from this job
+    outputs:
+      image-digest: ${{ steps.build.outputs.digest }}
+      image-tag: ${{ steps.meta.outputs.tags }}
+    steps:
+      # Checkout the repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        # Sets up Docker Buildx, an enhanced build engine
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        # Logs into the GitHub Container Registry using the GITHUB_TOKEN
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        # Extracts metadata for the Docker image, such as tags and labels
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Generate tags based on branch name (e.g., main, develop)
+            type=ref,event=branch
+            # Generate tags for pull requests (e.g., pr-123)
+            type=ref,event=pr
+            # Generate tags based on semantic versioning from git tags (e.g., v1.2.3 -> 1.2.3, 1.2, 1)
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # Generate a tag based on the short commit SHA prefixed by the branch name (only for branch pushes)
+            type=sha,prefix={{branch}}-,enable={{is_default_branch}}
+            # Generate a tag based on the short commit SHA for tag pushes
+            type=sha,prefix=commit-,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          # Build context is the root of the repository
+          context: .
+          # Build the 'development' stage defined in the Dockerfile
+          target: development
+          platforms: linux/amd64
+          # Push the built image to the registry
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Enable caching using GitHub Actions cache
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+  # Job 3: Test Docker Image
+  test-docker-image:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build-docker-image
+    # Use a matrix strategy to run multiple test types
+    strategy:
+      matrix:
+        test-type: [basic, import, help]
+    steps:
+      # Log in to the Container Registry to pull the image
+      - name: Log in to Container Registry
+        # This step is necessary if the image built in the previous job isn't immediately available or if running on a different runner.
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Test Docker image - ${{ matrix.test-type }}
+        # Run tests inside the built Docker image
+        run: |
+          # Get the first tag from the list of tags generated by the metadata action
+          IMAGE_TAG=$(echo "${{ needs.build-docker-image.outputs.image-tag }}" | head -n1)
+          echo "Testing image: $IMAGE_TAG"
+
+          # Use a case statement to run different commands based on the matrix test-type
+          case "${{ matrix.test-type }}" in
+            "basic")
+              # Example: Run a basic command like 'help' (assuming the image has an entrypoint/command like this)
+              docker run --rm $IMAGE_TAG help
+              ;;
+            "import")
+              # Example: Test if Python environment is working inside the container
+              docker run --rm $IMAGE_TAG bash -c "python -c 'print(\"Testing Python environment\")'"
+              ;;
+            "help")
+              # Example: Check paths and versions of tools like python and conda
+              docker run --rm $IMAGE_TAG bash -c "which python && python --version && which conda && conda --version"
+              ;;
+          esac
+
+  # Job 4: Build Python Wheels for Multiple Platforms
+  build-wheels:
+    name: Build Python Wheels
+    runs-on: ${{ matrix.os }}
+    needs: [lint-and-format, test-docker-image]
+    if: always() && (needs.lint-and-format.result == 'success' && needs.test-docker-image.result == 'success' || github.event.inputs.force_build == 'true')
+    strategy:
+      fail-fast: false
+      # Build wheels on different operating systems
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            # Note: arch is defined but not explicitly used in the steps below.
+            # It might be intended for cross-compilation or specific build flags.
+            arch: x64
+          - os: windows-latest
+            platform: windows
+            arch: x64
+    
+    steps:
+      - name: Checkout repository
+        # Checkout the repository code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          # Note: fetch-depth 0 might be needed for git-lfs or other tools used later.
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            # Cache pip and conda caches
+            ~/.cache/pip
+            ~/.cache/conda
+          # Cache key based on OS, Python version, and hash of requirements/pyproject files
+          key: ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/requirements*.txt', '**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-
+            ${{ runner.os }}-python-
+
+      - name: Install build dependencies (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          # Install essential build tools
+          sudo apt-get install -y build-essential cmake git git-lfs curl
+          # Install Rust
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source ~/.cargo/env
+          # Add Rust cargo bin directory to PATH
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+      - name: Install build dependencies (Windows)
+        if: matrix.platform == 'windows'
+        shell: powershell
+        run: |
+          choco install cmake git rust
+          git lfs install
+          # Note: Chocolatey needs to be pre-installed on the Windows runner image.
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install build wheel setuptools twine
+          pip install numpy scipy
+          # Install tools for building and publishing wheels, and necessary runtime dependencies.
+          # Note: twine is installed but not used in this workflow.
+
+      - name: Create mock MLC-LLM source structure
+        shell: bash
+        run: |
+          mkdir -p python/mlc_llm
+          cat > python/mlc_llm/__init__.py << 'EOF'
+          """MLC-LLM: Machine Learning Compiler for Large Language Models."""
+          __version__ = "0.1.0"
+          print(f"MLC-LLM version {__version__} loaded")
+          EOF
+          # Creates a minimal __init__.py file to make the 'python/mlc_llm' directory a valid package.
+          
+          cat > python/setup.py << 'EOF'
+          from setuptools import setup, find_packages
+          
+          setup(
+              name="mlc-llm",
+              version="0.1.0",
+              packages=find_packages(),
+              description="Machine Learning Compiler for Large Language Models",
+              long_description="A high-performance deployment engine for large language models.",
+              author="MLC Team",
+              python_requires=">=3.8",
+              install_requires=[
+                  "numpy",
+                  "scipy",
+              ],
+              classifiers=[
+                  "Development Status :: 3 - Alpha",
+                  "Intended Audience :: Developers",
+                  "License :: OSI Approved :: Apache Software License",
+                  "Programming Language :: Python :: 3",
+                  "Programming Language :: Python :: 3.8",
+                  "Programming Language :: Python :: 3.9",
+                  "Programming Language :: Python :: 3.10",
+                  "Programming Language :: Python :: 3.11",
+              ],
+          )
+          EOF
+          # Creates a minimal setup.py file to define the package metadata and build process.
+          # This suggests the actual build logic might be handled by other tools or scripts not shown here,
+          # and this setup.py is just for packaging the Python interface.
+
+      - name: Build wheel
+        shell: bash
+        run: |
+          cd python
+          python -m build --wheel
+          ls -la dist/
+          # Builds the wheel package using the 'build' tool.
+
+      - name: Test wheel installation
+        shell: bash
+        run: |
+          cd python
+          # Test installing the built wheel and importing the package
+          pip install dist/*.whl
+          python -c "import mlc_llm; print(mlc_llm.__version__)"
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform }}-${{ matrix.arch }}
+          # Upload the built wheel files as workflow artifacts
+          path: python/dist/*.whl
+          retention-days: 30
+
+  # Job 5: Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-wheels, build-docker-image]
+    # This job only runs on tag pushes starting with 'v' AND if both wheel and docker builds succeeded.
+    if: startsWith(github.ref, 'refs/tags/v') && (needs.build-wheels.result == 'success' && needs.build-docker-image.result == 'success')
+    # Grant write permissions to the GITHUB_TOKEN for creating the release
+    permissions:
+      contents: write
+    steps:
+      # Checkout the repository code (needed to get tag info, etc.)
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all wheel artifacts
+        # Download the wheel artifacts uploaded by the 'build-wheels' job
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels/
+          pattern: wheels-*
+          merge-multiple: true
+
+      - name: Prepare release assets
+        run: |
+          # Create a directory for release assets and copy all downloaded wheels into it
+          # This is done to provide a clean list of files to the release action
+          mkdir -p release-assets
+          # In actions/download-artifact@v4, artifacts are downloaded with different structure
+          find wheels/ -name "*.whl" -exec cp {} release-assets/ \; 2>/dev/null || true
+          # Also check for direct wheel files in case structure is different
+          find . -name "*.whl" -path "./wheels*" -exec cp {} release-assets/ \; 2>/dev/null || true
+          ls -la release-assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # Upload all files in the release-assets directory as release assets
+          files: release-assets/*
+          # Automatically generate release notes based on commit history
+          generate_release_notes: true
+          # Do not create a draft release
+          draft: false
+          # Mark the release as a prerelease if the tag contains alpha, beta, or rc
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Job 6: Build and Push Production Docker Image
+  build-production-image:
+    name: Build Production Docker Image
+    runs-on: ubuntu-latest
+    needs: [build-wheels, test-docker-image]
+    # This job runs on pushes to 'main' or tag pushes starting with 'v'.
+    # Note: It depends on build-wheels and test-docker-image, but the 'if' condition doesn't explicitly check their success.
+    # This means it *could* run even if those jobs failed, which might not be intended.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout repository
+        # Checkout the repository code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        # Logs into the GitHub Container Registry using the GITHUB_TOKEN
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for production
+        id: meta-prod
+        uses: docker/metadata-action@v5
+        # Extracts metadata for the production Docker image
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Generate tags based on branch name with '-prod' suffix (e.g., main-prod)
+            type=ref,event=branch,suffix=-prod
+            # Generate tags based on semantic versioning from git tags with '-prod' suffix (e.g., v1.2.3 -> 1.2.3-prod)
+            type=semver,pattern={{version}},suffix=-prod
+            # Generate a 'prod' tag if it's the default branch (usually main)
+            type=raw,value=prod,enable={{is_default_branch}}
+
+      - name: Build and push production Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Build the 'production' stage defined in the Dockerfile
+          target: production
+          platforms: linux/amd64
+          # Push the built image
+          push: true
+          tags: ${{ steps.meta-prod.outputs.tags }}
+          labels: ${{ steps.meta-prod.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Job 7: Cleanup
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [create-release, build-production-image]
+    # This job runs regardless of the success of the jobs it depends on.
+    if: always()
+    steps:
+      - name: Delete old package versions
+        uses: actions/delete-package-versions@v4
+        continue-on-error: true
+        with:
+          # The name of the package in the GitHub Container Registry
+          package-name: mlc-llm-pipeline
+          package-type: container
+          # Keep at least the last 10 versions
+          min-versions-to-keep: 10
+          # Only delete versions that do not have any tags
+          delete-only-untagged-versions: true
