@@ -56,7 +56,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Cache Python dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           # Cache key based on OS, job name (lint), and hash of requirements/pyproject files
@@ -247,7 +247,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Cache Python dependencies
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: |
             # Cache pip and conda caches
@@ -343,7 +343,7 @@ jobs:
           python -c "import mlc_llm; print(mlc_llm.__version__)"
 
       - name: Upload wheel artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.platform }}-${{ matrix.arch }}
           # Upload the built wheel files as workflow artifacts
@@ -367,16 +367,21 @@ jobs:
 
       - name: Download all wheel artifacts
         # Download the wheel artifacts uploaded by the 'build-wheels' job
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: wheels/
+          pattern: wheels-*
+          merge-multiple: true
 
       - name: Prepare release assets
         run: |
           # Create a directory for release assets and copy all downloaded wheels into it
           # This is done to provide a clean list of files to the release action
           mkdir -p release-assets
-          find wheels/ -name "*.whl" -exec cp {} release-assets/ \;
+          # In actions/download-artifact@v4, artifacts are downloaded with different structure
+          find wheels/ -name "*.whl" -exec cp {} release-assets/ \; 2>/dev/null || true
+          # Also check for direct wheel files in case structure is different
+          find . -name "*.whl" -path "./wheels*" -exec cp {} release-assets/ \; 2>/dev/null || true
           ls -la release-assets/
 
       - name: Create Release

@@ -78,6 +78,8 @@ A production-quality CI/CD pipeline for [MLC-LLM](https://github.com/mlc-ai/mlc-
 - ✅ GitHub Container Registry publishing (with GITHUB_TOKEN)
 - ✅ Automated release creation
 - ✅ Proper workflow permissions configured
+- ✅ Updated to latest GitHub Actions (v4)
+- ✅ Fixed artifact upload/download compatibility
 - 🔄 Ready to switch to full MLC-LLM build after validation
 
 ## 🚀 Quick Start
