@@ -120,7 +120,7 @@ show_usage_examples() {
     cat << 'EOF'
 🚀 Getting Started:
    # Clone and setup
-   git clone https://github.com/your-username/mlc-llm-pipeline.git
+   git clone https://github.com/afzaal0007/mlc-llm-pipeline.git
    cd mlc-llm-pipeline
    
    # Build with Docker
@@ -140,7 +140,7 @@ show_usage_examples() {
    docker run --rm -v $(pwd):/workspace mlc-llm:dev build
    
    # Production deployment
-   docker run --gpus all ghcr.io/your-username/mlc-llm:prod
+   docker run --gpus all ghcr.io/afzaal0007/mlc-llm-pipeline:prod
 
 🔧 Build Options:
    # Release build with 8 cores
@@ -321,8 +321,8 @@ main() {
     echo "❓ Troubleshooting: docs/troubleshooting.md"
     echo ""
     echo -e "${YELLOW}Need help?${NC}"
-    echo "🐛 Issues: https://github.com/your-username/mlc-llm-pipeline/issues"
-    echo "💬 Discussions: https://github.com/your-username/mlc-llm-pipeline/discussions"
+    echo "🐛 Issues: https://github.com/afzaal0007/mlc-llm-pipeline/issues"
+    echo "💬 Discussions: https://github.com/afzaal0007/mlc-llm-pipeline/discussions"
     echo ""
 }
 

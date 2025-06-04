@@ -120,7 +120,7 @@ For experienced users who want to get started quickly:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/mlc-llm-pipeline.git
+git clone https://github.com/afzaal0007/mlc-llm-pipeline.git
 cd mlc-llm-pipeline
 
 # 2. Set up environment
@@ -502,5 +502,5 @@ After successful setup:
 
 ---
 
-**Need help?** [Open an issue](https://github.com/your-username/mlc-llm-pipeline/issues) or check our [discussions](https://github.com/your-username/mlc-llm-pipeline/discussions).
+**Need help?** [Open an issue](https://github.com/afzaal0007/mlc-llm-pipeline/issues) or check our [discussions](https://github.com/afzaal0007/mlc-llm-pipeline/discussions).
 

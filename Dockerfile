@@ -103,16 +103,21 @@ CMD ["bash"]
 # Build stage - for automated builds and CI
 FROM base as build
 
-# Copy source code
-COPY . /workspace/
+# Copy the MLC-LLM source code from the cloned repository
+COPY ./mlc-llm /workspace/mlc-llm
+# Copy our build and test scripts
+COPY ./scripts /workspace/scripts
+COPY ./tests /workspace/tests
+# Set the workspace to the MLC-LLM directory
+WORKDIR /workspace/mlc-llm
 
 # Set MLC_LLM_SOURCE_DIR environment variable
-ENV MLC_LLM_SOURCE_DIR=/workspace
+ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm
 ENV PYTHONPATH=${MLC_LLM_SOURCE_DIR}/python:${PYTHONPATH}
 
 # Build MLC-LLM
 RUN source activate mlc-llm && \
-    cd /workspace && \
+    cd /workspace/mlc-llm && \
     git submodule update --init --recursive && \
     mkdir -p build && \
     cd build && \
@@ -122,7 +127,7 @@ RUN source activate mlc-llm && \
 
 # Install MLC-LLM as Python package
 RUN source activate mlc-llm && \
-    cd /workspace && \
+    cd /workspace/mlc-llm && \
     pip install -e .
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
@@ -143,14 +148,14 @@ RUN apt-get update && apt-get install -y \
 
 # Copy built artifacts from build stage
 COPY --from=build /opt/conda /opt/conda
-COPY --from=build /workspace/build /workspace/build
-COPY --from=build /workspace/python /workspace/python
+COPY --from=build /workspace/mlc-llm/build /workspace/mlc-llm/build
+COPY --from=build /workspace/mlc-llm/python /workspace/mlc-llm/python
 
 ENV PATH="/opt/conda/bin:${PATH}"
-ENV MLC_LLM_SOURCE_DIR=/workspace
+ENV MLC_LLM_SOURCE_DIR=/workspace/mlc-llm
 ENV PYTHONPATH=${MLC_LLM_SOURCE_DIR}/python:${PYTHONPATH}
 
-WORKDIR /workspace
+WORKDIR /workspace/mlc-llm
 
 RUN echo "conda activate mlc-llm" >> ~/.bashrc
 

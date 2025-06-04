@@ -1,7 +1,7 @@
 # MLC-LLM CI/CD Pipeline
 
-[![CI/CD Pipeline](https://github.com/your-username/mlc-llm-pipeline/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/your-username/mlc-llm-pipeline/actions/workflows/ci-cd.yml)
-[![Docker Image](https://ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest)](https://github.com/your-username/mlc-llm-pipeline/pkgs/container/mlc-llm)
+[![CI/CD Pipeline](https://github.com/afzaal0007/mlc-llm-pipeline/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/afzaal0007/mlc-llm-pipeline/actions/workflows/ci-cd.yml)
+[![Docker Image](https://ghcr.io/afzaal0007/mlc-llm-pipeline:latest)](https://github.com/afzaal0007/mlc-llm-pipeline/pkgs/container/mlc-llm-pipeline)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A production-quality CI/CD pipeline for [MLC-LLM](https://github.com/mlc-ai/mlc-llm), featuring automated testing, cross-platform builds, and containerized deployment. This pipeline provides comprehensive automation for building, testing, and distributing MLC-LLM across multiple platforms.
@@ -75,18 +75,18 @@ A production-quality CI/CD pipeline for [MLC-LLM](https://github.com/mlc-ai/mlc-
 docker run -it --gpus all \
   -v $(pwd):/workspace \
   -p 8888:8888 \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest bash
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest bash
 
 # Production environment
 docker run --gpus all \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:prod
+  ghcr.io/afzaal0007/mlc-llm-pipeline:prod
 ```
 
 ### Option 2: Building from Source
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/mlc-llm-pipeline.git
+git clone https://github.com/afzaal0007/mlc-llm-pipeline.git
 cd mlc-llm-pipeline
 
 # Build using the provided script
@@ -100,7 +100,7 @@ cd mlc-llm-pipeline
 
 ```bash
 # Download from GitHub Releases
-wget https://github.com/your-username/mlc-llm-pipeline/releases/latest/download/mlc_llm-*.whl
+wget https://github.com/afzaal0007/mlc-llm-pipeline/releases/latest/download/mlc_llm-*.whl
 pip install mlc_llm-*.whl
 
 # Verify installation
@@ -116,7 +116,7 @@ python -c "import mlc_llm; print(mlc_llm.__version__)"
 docker run -it --gpus all \
   -v $(pwd):/workspace \
   -p 8888:8888 -p 8000:8000 \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 
 # Inside container - available commands:
 # build    - Build MLC-LLM from source
@@ -132,7 +132,7 @@ docker run -it --gpus all \
 # Build MLC-LLM in container
 docker run --rm \
   -v $(pwd):/workspace \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest build
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest build
 
 # Extract build artifacts
 docker cp container_id:/workspace/build ./build
@@ -145,12 +145,12 @@ docker cp container_id:/workspace/dist ./dist
 # Build with specific GPU backend
 docker run --rm \
   -e CMAKE_ARGS="-DUSE_CUDA=ON -DUSE_VULKAN=OFF" \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest build
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest build
 
 # Build with custom configuration
 docker run --rm \
   -v $(pwd)/custom_config.py:/workspace/cmake/gen_cmake_config.py \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest build
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest build
 ```
 
 ## 🛠️ Local Development
@@ -329,13 +329,13 @@ DOCKER_HUB_TOKEN      # Additional registry
 
 ```bash
 # Check image size
-docker images ghcr.io/your-username/mlc-llm-pipeline/mlc-llm
+docker images ghcr.io/afzaal0007/mlc-llm-pipeline
 
 # Inspect image layers
-docker history ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+docker history ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 
 # Security scan
-docker scout cves ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+docker scout cves ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 ```
 
 ### Performance Benchmarks
@@ -368,7 +368,7 @@ export API_KEY=$(cat /run/secrets/api_key)
 
 # Docker secrets (for Swarm/Kubernetes)
 docker run --secret source=api_key,target=/run/secrets/api_key \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 ```
 
 ### Network Security
@@ -376,12 +376,12 @@ docker run --secret source=api_key,target=/run/secrets/api_key \
 ```bash
 # Run with network isolation
 docker run --network none \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 
 # Custom network for multi-container setup
 docker network create mlc-network
 docker run --network mlc-network \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 ```
 
 ## 🔍 Troubleshooting
@@ -441,7 +441,7 @@ which python  # Verify correct Python interpreter
 
 # Container debugging
 docker run -it --entrypoint bash \
-  ghcr.io/your-username/mlc-llm-pipeline/mlc-llm:latest
+  ghcr.io/afzaal0007/mlc-llm-pipeline:latest
 ```
 
 ### Getting Help
@@ -522,7 +522,7 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 ---
 
-**📞 Support**: For questions and support, please [open an issue](https://github.com/your-username/mlc-llm-pipeline/issues) or join our [discussions](https://github.com/your-username/mlc-llm-pipeline/discussions).
+**📞 Support**: For questions and support, please [open an issue](https://github.com/afzaal0007/mlc-llm-pipeline/issues) or join our [discussions](https://github.com/afzaal0007/mlc-llm-pipeline/discussions).
 
 **⭐ Star this repository** if you find it helpful!
 
